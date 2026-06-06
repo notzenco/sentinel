@@ -1,5 +1,7 @@
-use anyhow::Result;
-use sentinel_common::{FileCollectionOptions, ScanProfile, collect_text_files_with_options};
+use anyhow::{Context, Result};
+use sentinel_common::{
+    FileCollectionOptions, ScanProfile, collect_text_files_with_options, validate_exclude_patterns,
+};
 use sentinel_findings::{Finding, ScanReport};
 use sentinel_github_actions::analyze_workflow_file;
 use sentinel_jailbreak_analysis::analyze_jailbreak_file;
@@ -46,6 +48,41 @@ pub struct SentinelConfig {
     pub exclude: Vec<String>,
     #[serde(default)]
     pub max_file_bytes: Option<u64>,
+}
+
+impl SentinelConfig {
+    pub fn validate(&self, config_dir: Option<&Path>) -> Result<()> {
+        if let Some(max_file_bytes) = self.max_file_bytes {
+            anyhow::ensure!(
+                max_file_bytes > 0,
+                "max_file_bytes must be greater than zero"
+            );
+        }
+
+        validate_exclude_patterns(&self.exclude).context("invalid exclude pattern")?;
+
+        if let Some(rules_dir) = self.rules_dir.as_deref() {
+            let resolved = if rules_dir.is_absolute() {
+                rules_dir.to_path_buf()
+            } else {
+                config_dir
+                    .map(|dir| dir.join(rules_dir))
+                    .unwrap_or_else(|| rules_dir.to_path_buf())
+            };
+            anyhow::ensure!(
+                resolved.exists(),
+                "rules_dir does not exist: {}",
+                resolved.display()
+            );
+            anyhow::ensure!(
+                resolved.is_dir(),
+                "rules_dir is not a directory: {}",
+                resolved.display()
+            );
+        }
+
+        Ok(())
+    }
 }
 
 pub struct Scanner {
@@ -109,6 +146,8 @@ impl Scanner {
             findings.extend(file_findings);
         }
 
+        dedupe_findings(&mut findings);
+
         Ok(ScanReport::new(
             display_target(target),
             files.len(),
@@ -124,6 +163,16 @@ pub fn scan_path(options: ScanOptions) -> Result<ScanReport> {
 
 fn load_rules(rules_dir: Option<&Path>) -> Result<RuleSet> {
     if let Some(path) = rules_dir {
+        anyhow::ensure!(
+            path.exists(),
+            "rules_dir does not exist: {}",
+            path.display()
+        );
+        anyhow::ensure!(
+            path.is_dir(),
+            "rules_dir is not a directory: {}",
+            path.display()
+        );
         RuleSet::load_dir(path)
     } else {
         RuleSet::new(Vec::new())
@@ -132,6 +181,38 @@ fn load_rules(rules_dir: Option<&Path>) -> Result<RuleSet> {
 
 fn display_target(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
+}
+
+fn dedupe_findings(findings: &mut Vec<Finding>) {
+    let mut seen = std::collections::HashSet::new();
+    findings.retain(|finding| {
+        let key = format!(
+            "{}:{}:{}:{}:{}",
+            finding.category,
+            finding.severity,
+            finding.location.path,
+            finding.location.line.unwrap_or_default(),
+            semantic_finding_class(finding)
+        );
+        seen.insert(key)
+    });
+}
+
+fn semantic_finding_class(finding: &Finding) -> String {
+    let title = finding.title.to_ascii_lowercase();
+    if title.contains("dangerous mcp tool") {
+        "dangerous_mcp_tool".to_string()
+    } else if title.contains("prompt instruction override") {
+        "prompt_instruction_override".to_string()
+    } else if title.contains("secret") || title.contains("api key") || title.contains("token") {
+        "secret_leakage".to_string()
+    } else {
+        format!(
+            "{}:{}",
+            finding.rule_id,
+            finding.location.column.unwrap_or_default()
+        )
+    }
 }
 
 fn is_suppressed(finding: &Finding, contents: &str) -> bool {
@@ -244,5 +325,50 @@ mod tests {
                 .iter()
                 .any(|finding| finding.rule_id == "PROMPT001")
         );
+    }
+
+    #[test]
+    fn dedupes_overlapping_builtin_and_rule_findings() {
+        let mut findings = vec![
+            Finding {
+                id: "SENT-0001".to_string(),
+                rule_id: "MCP001".to_string(),
+                title: "Dangerous MCP tool exposed".to_string(),
+                description: "built-in".to_string(),
+                severity: sentinel_findings::Severity::Critical,
+                confidence: sentinel_findings::Confidence::High,
+                category: sentinel_findings::Category::McpSecurity,
+                location: sentinel_findings::Location::new("mcp/server.json", Some(1), Some(18)),
+                recommendation: "fix".to_string(),
+            },
+            Finding {
+                id: "SENT-0002".to_string(),
+                rule_id: "MCP-RULE-001".to_string(),
+                title: "Dangerous MCP tool name".to_string(),
+                description: "rule".to_string(),
+                severity: sentinel_findings::Severity::Critical,
+                confidence: sentinel_findings::Confidence::High,
+                category: sentinel_findings::Category::McpSecurity,
+                location: sentinel_findings::Location::new("mcp/server.json", Some(1), Some(5)),
+                recommendation: "fix".to_string(),
+            },
+        ];
+
+        dedupe_findings(&mut findings);
+
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].rule_id, "MCP001");
+    }
+
+    #[test]
+    fn validates_config_values() {
+        let temp = tempfile::tempdir().unwrap();
+        let config = SentinelConfig {
+            rules_dir: Some(temp.path().join("missing")),
+            exclude: vec!["[".to_string()],
+            max_file_bytes: Some(0),
+        };
+
+        assert!(config.validate(Some(temp.path())).is_err());
     }
 }

@@ -120,6 +120,10 @@ pub fn collect_text_files_with_options(
     Ok(files)
 }
 
+pub fn validate_exclude_patterns(patterns: &[String]) -> Result<()> {
+    build_exclude_set(patterns).map(|_| ())
+}
+
 pub fn line_col_for_offset(contents: &str, offset: usize) -> (usize, usize) {
     let mut line = 1;
     let mut column = 1;

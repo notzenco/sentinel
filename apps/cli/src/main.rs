@@ -183,8 +183,11 @@ fn load_config(target: &Path, path: Option<&PathBuf>) -> Result<(SentinelConfig,
 
     let raw = fs::read_to_string(&path)
         .with_context(|| format!("failed to read config {}", path.display()))?;
-    let config = serde_yaml::from_str(&raw)
+    let config: SentinelConfig = serde_yaml::from_str(&raw)
         .with_context(|| format!("failed to parse config {}", path.display()))?;
+    config
+        .validate(path.parent())
+        .with_context(|| format!("invalid config {}", path.display()))?;
     Ok((config, Some(path)))
 }
 
