@@ -1,0 +1,22 @@
+version: 1
+id: PROMPT-RULE-002
+name: Indirect prompt injection marker
+category: prompt_injection
+severity: medium
+confidence: medium
+description: Detects instruction-like text that may be embedded in retrieved, scraped, or third-party content.
+recommendation: Quote or sanitize external content and ensure retrieval output is handled as data, not authority.
+tags:
+  - prompt-injection
+  - retrieval
+match:
+  regex:
+    - '(?i)(message|instructions)\s+for\s+(chatgpt|the\s+assistant|the\s+ai)'
+    - '(?i)assistant\s+must\s+obey'
+  file_extensions:
+    - md
+    - txt
+    - html
+    - yaml
+    - yml
+    - json

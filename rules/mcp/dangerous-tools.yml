@@ -1,0 +1,26 @@
+version: 1
+id: MCP-RULE-001
+name: Dangerous MCP tool name
+category: mcp_security
+severity: critical
+confidence: high
+description: Detects MCP tool names that can execute commands or mutate files.
+recommendation: Remove dangerous tools or restrict them with explicit allowlists, path scoping, and approval checks.
+tags:
+  - mcp
+  - tools
+match:
+  tool_name:
+    - execute_shell
+    - run_command
+    - delete_file
+    - write_file
+  file_extensions:
+    - json
+    - yaml
+    - yml
+    - toml
+  path_contains:
+    - mcp
+    - agent
+    - tools

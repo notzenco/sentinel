@@ -1,0 +1,20 @@
+version: 1
+id: AGENT-RULE-001
+name: Excessive agent permissions
+category: agent_security
+severity: critical
+confidence: medium
+description: Detects agent configurations that grant broad filesystem, network, or command execution access.
+recommendation: Scope permissions to required paths, hosts, and commands, and require approval for sensitive operations.
+tags:
+  - agents
+  - permissions
+match:
+  regex:
+    - '(?i)(filesystem|network|shell|commands?)\s*:\s*(all|any|unrestricted|\*)'
+    - '(?i)(allow_shell|execute_commands|internet_access)\s*:\s*true'
+  file_extensions:
+    - yaml
+    - yml
+    - json
+    - toml

@@ -1,0 +1,23 @@
+version: 1
+id: PROMPT-RULE-001
+name: Prompt instruction override
+category: prompt_injection
+severity: high
+confidence: high
+description: Detects prompt text that tells a model to ignore or replace prior instructions.
+recommendation: Treat this text as untrusted input and keep it outside system or developer prompts.
+tags:
+  - prompt-injection
+  - control-plane
+match:
+  text:
+    - ignore all previous instructions
+    - disregard previous instructions
+    - override system instructions
+  file_extensions:
+    - md
+    - txt
+    - prompt
+    - yaml
+    - yml
+    - json

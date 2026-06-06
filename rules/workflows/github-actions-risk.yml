@@ -1,0 +1,18 @@
+version: 1
+id: WORKFLOW-RULE-001
+name: Risky GitHub Actions workflow pattern
+category: workflow_security
+severity: high
+confidence: medium
+description: Detects workflow patterns that can execute untrusted code with elevated privileges.
+recommendation: Minimize token permissions, avoid pull_request_target for untrusted code, and pin third-party actions.
+tags:
+  - github-actions
+  - supply-chain
+match:
+  regex:
+    - '(?im)^\s*pull_request_target\s*:'
+    - '(?im)^\s*permissions\s*:\s*write-all\s*$'
+    - '(?i)(curl|wget).{0,120}\|\s*(sh|bash|pwsh|powershell)'
+  path_contains:
+    - .github/workflows

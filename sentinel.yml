@@ -1,0 +1,6 @@
+rules_dir: rules
+exclude:
+  - target/**
+  - examples/**
+  - rules/**
+max_file_bytes: 2097152
