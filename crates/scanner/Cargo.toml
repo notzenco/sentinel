@@ -1,0 +1,24 @@
+[package]
+name = "sentinel-scanner"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+sentinel-common = { path = "../common" }
+sentinel-findings = { path = "../findings" }
+sentinel-github-actions = { path = "../github-actions" }
+sentinel-jailbreak-analysis = { path = "../jailbreak-analysis" }
+sentinel-mcp-analysis = { path = "../mcp-analysis" }
+sentinel-prompt-analysis = { path = "../prompt-analysis" }
+sentinel-rules = { path = "../rules" }
+sentinel-secret-analysis = { path = "../secret-analysis" }
+serde.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
