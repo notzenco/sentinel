@@ -1,0 +1,26 @@
+name: Sentinel AI Security Scan
+description: Scan AI prompts, agents, MCP servers, workflows, and configuration for security risks.
+inputs:
+  path:
+    description: Path to scan.
+    required: false
+    default: .
+  fail-on:
+    description: Minimum severity that fails the workflow.
+    required: false
+    default: high
+  sarif-output:
+    description: SARIF output path.
+    required: false
+    default: sentinel.sarif
+runs:
+  using: composite
+  steps:
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+    - name: Install Sentinel
+      shell: bash
+      run: cargo install --path "$GITHUB_ACTION_PATH/apps/cli" --locked
+    - name: Run Sentinel
+      shell: bash
+      run: sentinel ci "${{ inputs.path }}" --fail-on "${{ inputs.fail-on }}" --sarif-output "${{ inputs.sarif-output }}"
