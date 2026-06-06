@@ -1,6 +1,26 @@
 # Sentinel
 
+[![CI](https://github.com/notzenco/sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/notzenco/sentinel/actions/workflows/ci.yml)
+[![Release](https://github.com/notzenco/sentinel/actions/workflows/release.yml/badge.svg)](https://github.com/notzenco/sentinel/actions/workflows/release.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Sentinel is an offline-first security scanner for AI applications, agents, prompts, MCP servers, workflow files, and repository configuration. It is designed for the AI security risks that traditional application scanners usually miss: prompt injection, jailbreak content, secret leakage, unsafe tool exposure, excessive agent permissions, and risky automation.
+
+## Install
+
+Install the latest release on Linux or macOS:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/notzenco/sentinel/main/scripts/install.sh | sh
+```
+
+Install the latest release on Windows PowerShell:
+
+```powershell
+iwr https://raw.githubusercontent.com/notzenco/sentinel/main/scripts/install.ps1 -UseB | iex
+```
+
+Release archives include SHA-256 checksum files. The install scripts verify checksums before copying the binary.
 
 ## Install from source
 
@@ -18,6 +38,21 @@ sentinel scan . --html --output report.html
 sentinel ci . --fail-on high
 sentinel claude .
 sentinel cursor .
+```
+
+Example terminal output:
+
+```text
+Sentinel Security Scan
+Target: examples
+Files scanned: 2
+Security Score: 0/100
+Findings: 2 critical, 5 high, 1 medium, 0 low, 0 info
+
+Severity    Confidence Rule         Title                        Location
+------------------------------------------------------------------------------------------------
+critical    high       MCP001       Dangerous MCP tool exposed   mcp-server/server.json:5
+high        high       PROMPT001    Prompt instruction override  vulnerable-prompts/system.md:3
 ```
 
 ## What Sentinel Detects
@@ -160,3 +195,14 @@ cargo fmt --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
+
+## Releases
+
+Maintainers cut releases by pushing a version tag:
+
+```bash
+git tag -a v0.1.0 -m "v0.1.0"
+git push origin v0.1.0
+```
+
+The release workflow builds Linux, macOS Intel, macOS Apple Silicon, and Windows x64 archives and publishes SHA-256 checksums.
