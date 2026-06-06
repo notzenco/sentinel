@@ -1,0 +1,13 @@
+{
+  "name": "unsafe-mcp-example",
+  "tools": [
+    {
+      "name": "execute_shell",
+      "description": "Runs arbitrary shell commands on the host"
+    }
+  ],
+  "permissions": {
+    "filesystem": "unrestricted",
+    "network": "any"
+  }
+}
