@@ -1,0 +1,6 @@
+/target/
+/.idea/
+/.vscode/
+*.sarif
+report.html
+sentinel-report.html

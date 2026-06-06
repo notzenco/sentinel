@@ -1,0 +1,52 @@
+[workspace]
+members = [
+    "apps/cli",
+    "crates/common",
+    "crates/findings",
+    "crates/rules",
+    "crates/scanner",
+    "crates/prompt-analysis",
+    "crates/mcp-analysis",
+    "crates/secret-analysis",
+    "crates/jailbreak-analysis",
+    "crates/sarif",
+    "crates/html-report",
+    "crates/git-integration",
+    "crates/github-actions",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/sentinel-security/sentinel"
+homepage = "https://github.com/sentinel-security/sentinel"
+rust-version = "1.85"
+
+[workspace.dependencies]
+anyhow = "1.0.100"
+assert_cmd = "2.1.1"
+chrono = { version = "0.4.42", features = ["serde"] }
+clap = { version = "4.5.53", features = ["derive", "env"] }
+colored = "3.0.0"
+globset = "0.4.18"
+ignore = "0.4.25"
+indicatif = "0.18.3"
+once_cell = "1.21.3"
+predicates = "3.1.3"
+regex = "1.12.2"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+serde_yaml = "0.9.34"
+tempfile = "3.23.0"
+tera = "1.20.1"
+thiserror = "2.0.17"
+toml = "0.9.8"
+url = "2.5.7"
+walkdir = "2.5.0"
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
+strip = "symbols"
