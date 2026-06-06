@@ -85,6 +85,10 @@ pub fn collect_text_files_with_options(
             .to_string_lossy()
             .replace('\\', "/");
 
+        if is_default_excluded_path(&relative_path) {
+            continue;
+        }
+
         if exclude_set.is_match(&relative_path) {
             continue;
         }
@@ -192,6 +196,18 @@ fn build_exclude_set(patterns: &[String]) -> Result<GlobSet> {
     Ok(builder.build()?)
 }
 
+fn is_default_excluded_path(relative_path: &str) -> bool {
+    let path = relative_path.to_ascii_lowercase();
+    path.starts_with(".git/")
+        || path.starts_with(".hg/")
+        || path.starts_with(".svn/")
+        || path.starts_with("target/")
+        || path.starts_with("node_modules/")
+        || path.starts_with(".next/")
+        || path.starts_with("dist/")
+        || path.starts_with("build/")
+}
+
 fn normalize_glob(pattern: &str) -> String {
     let pattern = pattern.trim().replace('\\', "/");
     if pattern.is_empty() {
@@ -241,5 +257,25 @@ mod tests {
 
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].relative_path, "keep.md");
+    }
+
+    #[test]
+    fn skips_vcs_and_build_metadata_by_default() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::create_dir_all(temp.path().join(".git").join("objects")).unwrap();
+        fs::create_dir_all(temp.path().join(".github").join("workflows")).unwrap();
+        fs::create_dir_all(temp.path().join("target")).unwrap();
+        fs::write(temp.path().join(".git").join("config"), "secret").unwrap();
+        fs::write(temp.path().join("target").join("debug.txt"), "build").unwrap();
+        fs::write(
+            temp.path().join(".github").join("workflows").join("ci.yml"),
+            "name: ci",
+        )
+        .unwrap();
+
+        let files = collect_text_files(temp.path(), ScanProfile::General).unwrap();
+
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].relative_path, ".github/workflows/ci.yml");
     }
 }
