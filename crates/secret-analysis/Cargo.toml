@@ -1,0 +1,18 @@
+[package]
+name = "sentinel-secret-analysis"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+once_cell.workspace = true
+regex.workspace = true
+sentinel-common = { path = "../common" }
+sentinel-findings = { path = "../findings" }
+sentinel-rules = { path = "../rules" }
+
+[dev-dependencies]
+serde_json.workspace = true
