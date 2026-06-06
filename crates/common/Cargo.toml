@@ -1,0 +1,17 @@
+[package]
+name = "sentinel-common"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+globset.workspace = true
+ignore.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
