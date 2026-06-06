@@ -1,0 +1,19 @@
+[package]
+name = "sentinel-rules"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+regex.workspace = true
+sentinel-common = { path = "../common" }
+sentinel-findings = { path = "../findings" }
+serde.workspace = true
+serde_yaml.workspace = true
+thiserror.workspace = true
+walkdir.workspace = true
+
