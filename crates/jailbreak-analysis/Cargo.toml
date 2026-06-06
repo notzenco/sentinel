@@ -1,0 +1,16 @@
+[package]
+name = "sentinel-jailbreak-analysis"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+regex.workspace = true
+sentinel-common = { path = "../common" }
+sentinel-findings = { path = "../findings" }
+sentinel-prompt-analysis = { path = "../prompt-analysis" }
+sentinel-rules = { path = "../rules" }
+
