@@ -106,15 +106,6 @@ fn detect_dangerous_tools(
         collect_dangerous_structured_tools(value, &mut matched_tools);
     }
 
-    for tool in &matched_tools {
-        findings.push(dangerous_tool_finding(
-            relative_path,
-            contents,
-            tool,
-            id_allocator,
-        ));
-    }
-
     for tool in DANGEROUS_TOOL_NAMES {
         if matched_tools.contains(*tool) {
             continue;
@@ -127,14 +118,19 @@ fn detect_dangerous_tools(
         .expect("dangerous tool regex must compile");
 
         if regex.find(contents).is_some() {
-            findings.push(dangerous_tool_finding(
-                relative_path,
-                contents,
-                tool,
-                id_allocator,
-            ));
+            matched_tools.insert(tool.to_string());
         }
     }
+
+    if !matched_tools.is_empty() {
+        findings.push(dangerous_tool_finding(
+            relative_path,
+            contents,
+            &matched_tools,
+            id_allocator,
+        ));
+    }
+
     findings
 }
 
@@ -284,17 +280,28 @@ fn detect_exfiltration(
 fn dangerous_tool_finding(
     relative_path: &str,
     contents: &str,
-    tool: &str,
+    tools: &HashSet<String>,
     id_allocator: &mut FindingIdAllocator,
 ) -> Finding {
-    let offset = find_case_insensitive(contents, tool).unwrap_or_default();
+    let mut tools = tools.iter().cloned().collect::<Vec<_>>();
+    tools.sort();
+    let offset = tools
+        .iter()
+        .filter_map(|tool| find_case_insensitive(contents, tool))
+        .min()
+        .unwrap_or_default();
     let (line, column) = line_col_for_offset(contents, offset);
+    let tool_list = tools
+        .iter()
+        .map(|tool| format!("`{tool}`"))
+        .collect::<Vec<_>>()
+        .join(", ");
     Finding {
         id: id_allocator.next_id(),
         rule_id: "MCP001".to_string(),
         title: "Dangerous MCP tool exposed".to_string(),
         description: format!(
-            "The MCP configuration exposes a tool named `{tool}`, which can enable unsafe host access."
+            "The MCP configuration exposes dangerous tool capability through: {tool_list}."
         ),
         severity: Severity::Critical,
         confidence: Confidence::High,
@@ -921,6 +928,25 @@ mod tests {
         );
 
         assert!(findings.iter().any(|finding| finding.rule_id == "MCP001"));
+    }
+
+    #[test]
+    fn emits_one_dangerous_tool_finding_per_file() {
+        let mut ids = FindingIdAllocator::new();
+        let findings = analyze_mcp_file(
+            "agent.json",
+            r#"{ "allowed_tools": ["read_file", "execute_shell", "write_file"] }"#,
+            &mut ids,
+        );
+
+        let tool_findings = findings
+            .iter()
+            .filter(|finding| finding.rule_id == "MCP001")
+            .collect::<Vec<_>>();
+
+        assert_eq!(tool_findings.len(), 1);
+        assert!(tool_findings[0].description.contains("execute_shell"));
+        assert!(tool_findings[0].description.contains("write_file"));
     }
 
     #[test]
