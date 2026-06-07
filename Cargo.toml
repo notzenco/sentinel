@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "apps/cli",
+    "crates/ai-config",
     "crates/common",
     "crates/findings",
     "crates/rules",
@@ -17,11 +18,11 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 license = "MIT"
-repository = "https://github.com/sentinel-security/sentinel"
-homepage = "https://github.com/sentinel-security/sentinel"
+repository = "https://github.com/notzenco/sentinel"
+homepage = "https://github.com/notzenco/sentinel"
 rust-version = "1.85"
 
 [workspace.dependencies]

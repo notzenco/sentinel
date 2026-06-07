@@ -1,5 +1,5 @@
 [package]
-name = "sentinel-mcp-analysis"
+name = "sentinel-ai-config"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,12 +8,8 @@ homepage.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-regex.workspace = true
-sentinel-ai-config = { path = "../ai-config" }
-sentinel-common = { path = "../common" }
-sentinel-findings = { path = "../findings" }
-sentinel-rules = { path = "../rules" }
+serde.workspace = true
 serde_json.workspace = true
 serde_yaml.workspace = true
 toml.workspace = true
-url.workspace = true
+
