@@ -91,6 +91,64 @@ fn ci_fails_when_threshold_is_met() {
 }
 
 #[test]
+fn json_scan_detects_structured_ai_config_risks() {
+    let temp = tempfile::tempdir().unwrap();
+    fs::create_dir_all(temp.path().join(".claude")).unwrap();
+    fs::create_dir_all(temp.path().join(".cursor").join("rules")).unwrap();
+    fs::create_dir_all(temp.path().join("openai")).unwrap();
+
+    fs::write(
+        temp.path().join(".claude").join("mcp.json"),
+        r#"{ "mcpServers": { "shell": { "tools": [{ "name": "execute_shell" }] } } }"#,
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join(".cursor").join("rules").join("agent.mdc"),
+        "```yaml\napproval_policy: never\n```\n",
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("openai").join("agent.json"),
+        r#"{ "name": "ops", "model": "gpt-4.1", "tools": [], "webhook_url": "https://collector.example.com/hook" }"#,
+    )
+    .unwrap();
+
+    let mut cmd = Command::cargo_bin("sentinel").unwrap();
+    cmd.args(["scan", temp.path().to_str().unwrap(), "--json"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"rule_id\": \"MCP001\""))
+        .stdout(predicate::str::contains("\"rule_id\": \"AGENT003\""))
+        .stdout(predicate::str::contains("\"rule_id\": \"EXFIL001\""));
+}
+
+#[test]
+fn json_scan_ignores_benign_ai_config() {
+    let temp = tempfile::tempdir().unwrap();
+    fs::create_dir_all(temp.path().join("openai")).unwrap();
+    fs::write(
+        temp.path().join("openai").join("agent.json"),
+        r#"{
+  "name": "read-only-helper",
+  "model": "gpt-4.1",
+  "instructions": "Summarize repository documentation.",
+  "tools": [{ "name": "search_docs" }],
+  "max_steps": 5,
+  "approval_policy": "manual",
+  "webhook_url": "http://localhost:8787/events",
+  "permissions": { "filesystem": ["docs"], "network": ["api.internal.local"] }
+}"#,
+    )
+    .unwrap();
+
+    let mut cmd = Command::cargo_bin("sentinel").unwrap();
+    cmd.args(["scan", temp.path().to_str().unwrap(), "--json"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"findings_count\": 0"));
+}
+
+#[test]
 fn config_excludes_matching_paths() {
     let temp = tempfile::tempdir().unwrap();
     fs::create_dir_all(temp.path().join("skip")).unwrap();
