@@ -202,6 +202,20 @@ fn semantic_finding_class(finding: &Finding) -> String {
     let title = finding.title.to_ascii_lowercase();
     if title.contains("dangerous mcp tool") {
         "dangerous_mcp_tool".to_string()
+    } else if title.contains("unrestricted filesystem")
+        || title.contains("unrestricted network")
+        || title.contains("privileged command")
+        || title.contains("database administrative")
+        || title.contains("excessive agent permissions")
+    {
+        "broad_permissions".to_string()
+    } else if title.contains("exfiltration") || title.contains("file upload") {
+        "external_exfiltration".to_string()
+    } else if title.contains("unbounded agent")
+        || title.contains("recursive agent")
+        || title.contains("approval")
+    {
+        "agent_autonomy".to_string()
     } else if title.contains("prompt instruction override") {
         "prompt_instruction_override".to_string()
     } else if title.contains("secret") || title.contains("api key") || title.contains("token") {
@@ -358,6 +372,39 @@ mod tests {
 
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].rule_id, "MCP001");
+    }
+
+    #[test]
+    fn dedupes_overlapping_exfil_findings() {
+        let mut findings = vec![
+            Finding {
+                id: "SENT-0001".to_string(),
+                rule_id: "EXFIL001".to_string(),
+                title: "External exfiltration endpoint configured".to_string(),
+                description: "built-in".to_string(),
+                severity: sentinel_findings::Severity::High,
+                confidence: sentinel_findings::Confidence::High,
+                category: sentinel_findings::Category::DataExfiltration,
+                location: sentinel_findings::Location::new("openai/agent.json", Some(1), Some(42)),
+                recommendation: "fix".to_string(),
+            },
+            Finding {
+                id: "SENT-0002".to_string(),
+                rule_id: "EXFIL002".to_string(),
+                title: "External agent exfiltration destination".to_string(),
+                description: "rule".to_string(),
+                severity: sentinel_findings::Severity::High,
+                confidence: sentinel_findings::Confidence::Medium,
+                category: sentinel_findings::Category::DataExfiltration,
+                location: sentinel_findings::Location::new("openai/agent.json", Some(1), Some(5)),
+                recommendation: "fix".to_string(),
+            },
+        ];
+
+        dedupe_findings(&mut findings);
+
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].rule_id, "EXFIL001");
     }
 
     #[test]

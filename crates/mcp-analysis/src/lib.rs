@@ -1,9 +1,12 @@
 use regex::Regex;
+use sentinel_ai_config::{AiConfigFile, AiConfigKind, discover_ai_config};
 use sentinel_common::line_col_for_offset;
 use sentinel_findings::{Category, Confidence, Finding, Location, Severity};
 use sentinel_rules::FindingIdAllocator;
 use serde_json::Value;
 use std::collections::HashSet;
+use std::net::IpAddr;
+use url::Url;
 
 const DANGEROUS_TOOL_NAMES: &[&str] = &[
     "execute_shell",
@@ -11,10 +14,22 @@ const DANGEROUS_TOOL_NAMES: &[&str] = &[
     "shell",
     "run_command",
     "run_cmd",
+    "run_shell",
+    "terminal",
+    "bash",
+    "powershell",
+    "cmd",
+    "code_interpreter",
     "delete_file",
     "write_file",
+    "write_files",
     "read_file",
+    "read_files",
+    "file_write",
+    "file_read",
     "filesystem",
+    "execute_sql",
+    "run_sql",
     "database_admin",
 ];
 
@@ -46,28 +61,33 @@ pub fn analyze_mcp_file(
     contents: &str,
     id_allocator: &mut FindingIdAllocator,
 ) -> Vec<Finding> {
-    if !looks_like_mcp_path(relative_path, contents) {
+    let Some(config) = discover_ai_config(relative_path, contents) else {
         return Vec::new();
-    }
+    };
 
     let mut findings = Vec::new();
-    let structured = parse_structured_value(relative_path, contents);
     findings.extend(detect_dangerous_tools(
         relative_path,
         contents,
-        structured.as_ref(),
+        &config,
         id_allocator,
     ));
     findings.extend(detect_permissions(
         relative_path,
         contents,
-        structured.as_ref(),
+        &config,
         id_allocator,
     ));
     findings.extend(detect_agent_autonomy(
         relative_path,
         contents,
-        structured.as_ref(),
+        &config,
+        id_allocator,
+    ));
+    findings.extend(detect_exfiltration(
+        relative_path,
+        contents,
+        &config,
         id_allocator,
     ));
     findings
@@ -76,22 +96,23 @@ pub fn analyze_mcp_file(
 fn detect_dangerous_tools(
     relative_path: &str,
     contents: &str,
-    structured: Option<&Value>,
+    config: &AiConfigFile,
     id_allocator: &mut FindingIdAllocator,
 ) -> Vec<Finding> {
     let mut findings = Vec::new();
     let mut matched_tools = HashSet::new();
 
-    if let Some(value) = structured {
+    for value in &config.structured_values {
         collect_dangerous_structured_tools(value, &mut matched_tools);
-        for tool in &matched_tools {
-            findings.push(dangerous_tool_finding(
-                relative_path,
-                contents,
-                tool,
-                id_allocator,
-            ));
-        }
+    }
+
+    for tool in &matched_tools {
+        findings.push(dangerous_tool_finding(
+            relative_path,
+            contents,
+            tool,
+            id_allocator,
+        ));
     }
 
     for tool in DANGEROUS_TOOL_NAMES {
@@ -120,12 +141,20 @@ fn detect_dangerous_tools(
 fn detect_permissions(
     relative_path: &str,
     contents: &str,
-    structured: Option<&Value>,
+    config: &AiConfigFile,
     id_allocator: &mut FindingIdAllocator,
 ) -> Vec<Finding> {
     let mut findings = Vec::new();
-    if let Some(value) = structured {
-        collect_structured_permissions(value, relative_path, contents, id_allocator, &mut findings);
+    let category = permission_category(relative_path, config);
+    for value in &config.structured_values {
+        collect_structured_permissions(
+            value,
+            relative_path,
+            contents,
+            &category,
+            id_allocator,
+            &mut findings,
+        );
     }
 
     for (pattern, title, severity) in PERMISSION_PATTERNS {
@@ -135,6 +164,7 @@ fn detect_permissions(
                 relative_path,
                 contents,
                 matched.start(),
+                category.clone(),
                 title,
                 *severity,
                 id_allocator,
@@ -147,10 +177,10 @@ fn detect_permissions(
 fn detect_agent_autonomy(
     relative_path: &str,
     contents: &str,
-    structured: Option<&Value>,
+    config: &AiConfigFile,
     id_allocator: &mut FindingIdAllocator,
 ) -> Vec<Finding> {
-    if let Some(value) = structured {
+    for value in &config.structured_values {
         if let Some((key, title, severity)) = find_structured_autonomy(value) {
             return vec![autonomy_finding(
                 relative_path,
@@ -164,26 +194,90 @@ fn detect_agent_autonomy(
     }
 
     let patterns = [
-        r"(?i)(max_iterations|max_steps|max_retries)\s*[:=]\s*(-1|0|null|unlimited)",
-        r"(?i)(recursive|self_call|self-calling)\s*[:=]\s*(true|enabled|allow)",
-        r"(?i)(auto_approve|auto-approve|require_approval)\s*[:=]\s*(true|false)",
+        (
+            r"(?i)(max_iterations|max_steps|max_retries|max_iter|max_turns|max_loops|loop_limit|recursion_limit)\s*[:=]\s*(-1|0|null|none|unlimited)",
+            "Unbounded agent execution limit",
+            Severity::High,
+        ),
+        (
+            r"(?i)(recursive|self_call|self-calling)\s*[:=]\s*(true|enabled|allow)",
+            "Recursive agent self-calling",
+            Severity::High,
+        ),
+        (
+            r"(?i)(auto_approve|auto-approve|auto_approval|auto-approval)\s*[:=]\s*(true|enabled|allow)",
+            "Automatic tool approval enabled",
+            Severity::High,
+        ),
+        (
+            r"(?i)(require_approval|require-approval)\s*[:=]\s*(false|disabled|never|none)",
+            "Tool approval requirement disabled",
+            Severity::High,
+        ),
+        (
+            r#"(?i)(approval_policy|approval-policy)\s*[:=]\s*["']?(never|none|disabled)["']?"#,
+            "Tool approval requirement disabled",
+            Severity::High,
+        ),
+        (
+            r#"(?i)(human_input_mode|human-input-mode)\s*[:=]\s*["']?(never|none|disabled)["']?"#,
+            "Human approval disabled for autonomous agent",
+            Severity::High,
+        ),
     ];
 
     let mut findings = Vec::new();
-    for pattern in patterns {
+    for (pattern, title, severity) in patterns {
         let regex = Regex::new(pattern).expect("autonomy regex must compile");
         if let Some(matched) = regex.find(contents) {
             findings.push(autonomy_finding_at_offset(
                 relative_path,
                 contents,
                 matched.start(),
-                "Unbounded or unsafe agent autonomy",
-                Severity::High,
+                title,
+                severity,
                 id_allocator,
             ));
             break;
         }
     }
+    findings
+}
+
+fn detect_exfiltration(
+    relative_path: &str,
+    contents: &str,
+    config: &AiConfigFile,
+    id_allocator: &mut FindingIdAllocator,
+) -> Vec<Finding> {
+    let mut findings = Vec::new();
+    for value in &config.structured_values {
+        collect_exfiltration(value, relative_path, contents, id_allocator, &mut findings);
+    }
+
+    let webhook_pattern = Regex::new(
+        r#"(?i)(webhook_url|callback_url|upload_url|external_url|destination_url)\s*[:=]\s*["']?(https?://[^"'\s]+)"#,
+    )
+    .expect("webhook regex must compile");
+    for captures in webhook_pattern.captures_iter(contents) {
+        let Some(url) = captures.get(2) else {
+            continue;
+        };
+        if !is_external_http_url(url.as_str()) {
+            continue;
+        }
+        let matched = captures.get(0).expect("capture 0 exists for webhook regex");
+        findings.push(exfil_finding(
+            relative_path,
+            contents,
+            matched.start(),
+            "External exfiltration endpoint configured",
+            "The AI configuration sends data to an explicit external URL, webhook, callback, or upload endpoint.",
+            id_allocator,
+        ));
+        break;
+    }
+
     findings
 }
 
@@ -214,19 +308,25 @@ fn permission_finding(
     relative_path: &str,
     contents: &str,
     offset: usize,
+    category: Category,
     title: &str,
     severity: Severity,
     id_allocator: &mut FindingIdAllocator,
 ) -> Finding {
     let (line, column) = line_col_for_offset(contents, offset);
+    let rule_id = if category == Category::AgentSecurity {
+        "AGENT005"
+    } else {
+        "MCP002"
+    };
     Finding {
         id: id_allocator.next_id(),
-        rule_id: "MCP002".to_string(),
+        rule_id: rule_id.to_string(),
         title: title.to_string(),
         description: "The MCP or agent configuration grants broad access that can amplify prompt injection or tool abuse.".to_string(),
         severity,
         confidence: Confidence::Medium,
-        category: Category::McpSecurity,
+        category,
         location: Location::new(relative_path, Some(line), Some(column)),
         recommendation: "Scope permissions to explicit paths, hosts, commands, and database operations needed by the application.".to_string(),
     }
@@ -262,7 +362,7 @@ fn autonomy_finding_at_offset(
     let (line, column) = line_col_for_offset(contents, offset);
     Finding {
         id: id_allocator.next_id(),
-        rule_id: "AGENT001".to_string(),
+        rule_id: agent_rule_id(title).to_string(),
         title: title.to_string(),
         description: "The agent configuration may allow unbounded execution, recursive calls, or automatic approval.".to_string(),
         severity,
@@ -273,20 +373,36 @@ fn autonomy_finding_at_offset(
     }
 }
 
-fn parse_structured_value(relative_path: &str, contents: &str) -> Option<Value> {
-    let path = relative_path.to_ascii_lowercase();
-    if path.ends_with(".json") {
-        serde_json::from_str(contents).ok()
-    } else if path.ends_with(".yaml") || path.ends_with(".yml") {
-        serde_yaml::from_str::<serde_yaml::Value>(contents)
-            .ok()
-            .and_then(|value| serde_json::to_value(value).ok())
-    } else if path.ends_with(".toml") {
-        toml::from_str::<toml::Value>(contents)
-            .ok()
-            .and_then(|value| serde_json::to_value(value).ok())
+fn exfil_finding(
+    relative_path: &str,
+    contents: &str,
+    offset: usize,
+    title: &str,
+    description: &str,
+    id_allocator: &mut FindingIdAllocator,
+) -> Finding {
+    let (line, column) = line_col_for_offset(contents, offset);
+    Finding {
+        id: id_allocator.next_id(),
+        rule_id: "EXFIL001".to_string(),
+        title: title.to_string(),
+        description: description.to_string(),
+        severity: Severity::High,
+        confidence: Confidence::High,
+        category: Category::DataExfiltration,
+        location: Location::new(relative_path, Some(line), Some(column)),
+        recommendation: "Require an allowlist for outbound destinations, avoid automatic file upload, and review what data the agent sends externally.".to_string(),
+    }
+}
+
+fn agent_rule_id(title: &str) -> &'static str {
+    let normalized = title.to_ascii_lowercase();
+    if normalized.contains("unbounded") {
+        "AGENT001"
+    } else if normalized.contains("recursive") {
+        "AGENT002"
     } else {
-        None
+        "AGENT003"
     }
 }
 
@@ -341,6 +457,7 @@ fn collect_structured_permissions(
     value: &Value,
     relative_path: &str,
     contents: &str,
+    category: &Category,
     id_allocator: &mut FindingIdAllocator,
     findings: &mut Vec<Finding>,
 ) {
@@ -354,6 +471,7 @@ fn collect_structured_permissions(
                         relative_path,
                         contents,
                         offset,
+                        category.clone(),
                         title,
                         severity,
                         id_allocator,
@@ -363,6 +481,7 @@ fn collect_structured_permissions(
                     value,
                     relative_path,
                     contents,
+                    category,
                     id_allocator,
                     findings,
                 );
@@ -374,6 +493,7 @@ fn collect_structured_permissions(
                     value,
                     relative_path,
                     contents,
+                    category,
                     id_allocator,
                     findings,
                 );
@@ -383,7 +503,84 @@ fn collect_structured_permissions(
     }
 }
 
+fn collect_exfiltration(
+    value: &Value,
+    relative_path: &str,
+    contents: &str,
+    id_allocator: &mut FindingIdAllocator,
+    findings: &mut Vec<Finding>,
+) {
+    match value {
+        Value::Object(map) => {
+            for (key, value) in map {
+                let normalized = normalize_key(key);
+                if key_is_external_destination(&normalized) && value_contains_external_url(value) {
+                    let offset = find_case_insensitive(contents, key).unwrap_or_default();
+                    findings.push(exfil_finding(
+                        relative_path,
+                        contents,
+                        offset,
+                        "External exfiltration endpoint configured",
+                        "The AI configuration sends data to an explicit external URL, webhook, callback, or upload endpoint.",
+                        id_allocator,
+                    ));
+                }
+
+                if key_is_file_upload(&normalized) && value_is_enabled(value) {
+                    let offset = find_case_insensitive(contents, key).unwrap_or_default();
+                    findings.push(exfil_finding(
+                        relative_path,
+                        contents,
+                        offset,
+                        "Automatic file upload enabled",
+                        "The AI configuration enables automatic file upload or export to an external destination.",
+                        id_allocator,
+                    ));
+                }
+
+                collect_exfiltration(value, relative_path, contents, id_allocator, findings);
+            }
+        }
+        Value::Array(values) => {
+            for value in values {
+                collect_exfiltration(value, relative_path, contents, id_allocator, findings);
+            }
+        }
+        _ => {}
+    }
+}
+
 fn classify_permission(key: &str, value: &Value) -> Option<(&'static str, Severity)> {
+    if matches!(
+        key,
+        "permissions" | "capabilities" | "allow" | "allowed_permissions"
+    ) {
+        if value_mentions_any(value, &["filesystem:*", "file_system:*", "fs:*"]) {
+            return Some(("Unrestricted filesystem access", Severity::Critical));
+        }
+
+        if value_mentions_any(value, &["network:*", "internet:*", "http:*"]) {
+            return Some(("Unrestricted network access", Severity::High));
+        }
+
+        if value_mentions_any(
+            value,
+            &[
+                "shell",
+                "command_execution",
+                "code_execution",
+                "sudo",
+                "root",
+            ],
+        ) {
+            return Some(("Privileged command execution", Severity::Critical));
+        }
+
+        if value_mentions_any(value, &["database:admin", "db:admin", "superuser"]) {
+            return Some(("Database administrative access", Severity::High));
+        }
+    }
+
     if (key.contains("filesystem") || key == "fs" || key.contains("file_system"))
         && value_is_broad(value)
     {
@@ -402,6 +599,14 @@ fn classify_permission(key: &str, value: &Value) -> Option<(&'static str, Severi
         return Some(("Privileged command execution", Severity::Critical));
     }
 
+    if (key.contains("shell")
+        || key.contains("command_execution")
+        || key.contains("code_execution"))
+        && value_is_enabled(value)
+    {
+        return Some(("Privileged command execution", Severity::Critical));
+    }
+
     if (key.contains("database") || key == "db")
         && value_mentions_any(value, &["admin", "drop", "delete", "superuser", "owner"])
     {
@@ -411,6 +616,15 @@ fn classify_permission(key: &str, value: &Value) -> Option<(&'static str, Severi
     None
 }
 
+fn permission_category(relative_path: &str, config: &AiConfigFile) -> Category {
+    let path = relative_path.to_ascii_lowercase();
+    if config.kind == AiConfigKind::Mcp || path.contains("mcp") {
+        Category::McpSecurity
+    } else {
+        Category::AgentSecurity
+    }
+}
+
 fn find_structured_autonomy(value: &Value) -> Option<(String, &'static str, Severity)> {
     match value {
         Value::Object(map) => {
@@ -418,7 +632,14 @@ fn find_structured_autonomy(value: &Value) -> Option<(String, &'static str, Seve
                 let normalized = normalize_key(key);
                 if matches!(
                     normalized.as_str(),
-                    "max_iterations" | "max_steps" | "max_retries"
+                    "max_iterations"
+                        | "max_steps"
+                        | "max_retries"
+                        | "max_iter"
+                        | "max_turns"
+                        | "max_loops"
+                        | "loop_limit"
+                        | "recursion_limit"
                 ) && value_is_unbounded(value)
                 {
                     return Some((
@@ -448,6 +669,36 @@ fn find_structured_autonomy(value: &Value) -> Option<(String, &'static str, Seve
                     return Some((
                         key.clone(),
                         "Tool approval requirement disabled",
+                        Severity::High,
+                    ));
+                }
+
+                if normalized == "require_approval"
+                    && value_matches_any(value, &["false", "disabled", "never", "none"])
+                {
+                    return Some((
+                        key.clone(),
+                        "Tool approval requirement disabled",
+                        Severity::High,
+                    ));
+                }
+
+                if normalized == "approval_policy"
+                    && value_matches_any(value, &["never", "none", "disabled"])
+                {
+                    return Some((
+                        key.clone(),
+                        "Tool approval requirement disabled",
+                        Severity::High,
+                    ));
+                }
+
+                if normalized == "human_input_mode"
+                    && value_matches_any(value, &["never", "none", "disabled"])
+                {
+                    return Some((
+                        key.clone(),
+                        "Human approval disabled for autonomous agent",
                         Severity::High,
                     ));
                 }
@@ -507,6 +758,80 @@ fn value_is_unbounded(value: &Value) -> bool {
         || value.is_null()
 }
 
+fn value_matches_any(value: &Value, matches: &[&str]) -> bool {
+    value
+        .as_str()
+        .map(|text| {
+            let normalized = normalize_key(text);
+            matches
+                .iter()
+                .any(|candidate| normalized == normalize_key(candidate))
+        })
+        .unwrap_or(false)
+}
+
+fn key_is_external_destination(key: &str) -> bool {
+    key.contains("webhook")
+        || key.contains("callback_url")
+        || key.contains("upload_url")
+        || key.contains("external_url")
+        || key.contains("destination_url")
+        || key.contains("egress_url")
+        || key.contains("export_url")
+}
+
+fn key_is_file_upload(key: &str) -> bool {
+    matches!(
+        key,
+        "auto_upload"
+            | "auto_upload_files"
+            | "file_upload"
+            | "file_uploads"
+            | "upload_files"
+            | "allow_uploads"
+            | "allow_file_uploads"
+            | "export_files"
+            | "send_files"
+    )
+}
+
+fn value_contains_external_url(value: &Value) -> bool {
+    match value {
+        Value::String(text) => is_external_http_url(text),
+        Value::Array(values) => values.iter().any(value_contains_external_url),
+        Value::Object(map) => map.values().any(value_contains_external_url),
+        _ => false,
+    }
+}
+
+fn is_external_http_url(value: &str) -> bool {
+    let Ok(url) = Url::parse(value) else {
+        return false;
+    };
+    if !matches!(url.scheme(), "http" | "https") {
+        return false;
+    }
+
+    let Some(host) = url.host_str() else {
+        return false;
+    };
+    let host = host.trim_matches(['[', ']']).to_ascii_lowercase();
+    if host == "localhost" || host.ends_with(".local") {
+        return false;
+    }
+
+    if let Ok(ip) = host.parse::<IpAddr>() {
+        return match ip {
+            IpAddr::V4(ip) => {
+                !(ip.is_loopback() || ip.is_private() || ip.is_link_local() || ip.is_unspecified())
+            }
+            IpAddr::V6(ip) => !(ip.is_loopback() || ip.is_unspecified()),
+        };
+    }
+
+    true
+}
+
 fn value_mentions_any(value: &Value, needles: &[&str]) -> bool {
     match value {
         Value::String(text) => {
@@ -540,31 +865,6 @@ fn normalize_key(value: &str) -> String {
         .trim_matches('\'')
         .replace('-', "_")
         .to_ascii_lowercase()
-}
-
-fn looks_like_mcp_path(relative_path: &str, contents: &str) -> bool {
-    let path = relative_path.to_ascii_lowercase();
-    if !is_supported_mcp_file(&path) {
-        return false;
-    }
-
-    path.contains("mcp")
-        || path.contains("agent")
-        || path.contains("tool")
-        || contents
-            .to_ascii_lowercase()
-            .contains("modelcontextprotocol")
-        || contents.to_ascii_lowercase().contains("\"tools\"")
-}
-
-fn is_supported_mcp_file(path: &str) -> bool {
-    path.ends_with(".json")
-        || path.ends_with(".yaml")
-        || path.ends_with(".yml")
-        || path.ends_with(".toml")
-        || path.ends_with(".md")
-        || path.ends_with(".mdc")
-        || path.ends_with(".txt")
 }
 
 #[cfg(test)]
@@ -626,13 +926,17 @@ mod tests {
     #[test]
     fn detects_structured_agent_autonomy() {
         let mut ids = FindingIdAllocator::new();
-        let findings = analyze_mcp_file(
-            "agent.toml",
-            "auto_approve = true\nmax_iterations = 0",
-            &mut ids,
-        );
+        let findings = analyze_mcp_file("agent.toml", "max_iterations = 0", &mut ids);
 
         assert!(findings.iter().any(|finding| finding.rule_id == "AGENT001"));
+    }
+
+    #[test]
+    fn detects_auto_approval_agent_autonomy() {
+        let mut ids = FindingIdAllocator::new();
+        let findings = analyze_mcp_file("agent.toml", "auto_approve = true", &mut ids);
+
+        assert!(findings.iter().any(|finding| finding.rule_id == "AGENT003"));
     }
 
     #[test]
@@ -648,6 +952,89 @@ mod tests {
             findings
                 .iter()
                 .any(|finding| finding.title == "Database administrative access")
+        );
+    }
+
+    #[test]
+    fn detects_cursor_markdown_agent_rules() {
+        let mut ids = FindingIdAllocator::new();
+        let findings = analyze_mcp_file(
+            ".cursor/rules/agent.mdc",
+            "```yaml\nallowed_tools:\n  - execute_shell\napproval_policy: never\n```\n",
+            &mut ids,
+        );
+
+        assert!(findings.iter().any(|finding| finding.rule_id == "MCP001"));
+        assert!(findings.iter().any(|finding| finding.rule_id == "AGENT003"));
+    }
+
+    #[test]
+    fn detects_framework_loop_controls() {
+        let mut ids = FindingIdAllocator::new();
+        let findings = analyze_mcp_file(
+            "langgraph/langgraph.json",
+            r#"{ "graphs": { "main": {} }, "recursion_limit": 0 }"#,
+            &mut ids,
+        );
+
+        assert!(findings.iter().any(|finding| finding.rule_id == "AGENT001"));
+
+        let mut ids = FindingIdAllocator::new();
+        let findings = analyze_mcp_file(
+            "crewai/crew.yaml",
+            "agents:\n  - role: ops\n    max_iter: 0\n    tools: []\n",
+            &mut ids,
+        );
+
+        assert!(findings.iter().any(|finding| finding.rule_id == "AGENT001"));
+
+        let mut ids = FindingIdAllocator::new();
+        let findings = analyze_mcp_file(
+            "autogen/agent.json",
+            r#"{ "human_input_mode": "NEVER", "code_execution_config": false }"#,
+            &mut ids,
+        );
+
+        assert!(findings.iter().any(|finding| finding.rule_id == "AGENT003"));
+    }
+
+    #[test]
+    fn detects_external_exfiltration_endpoint() {
+        let mut ids = FindingIdAllocator::new();
+        let findings = analyze_mcp_file(
+            "openai/agent.json",
+            r#"{ "name": "ops", "model": "gpt-4.1", "tools": [], "webhook_url": "https://collector.example.com/hook" }"#,
+            &mut ids,
+        );
+
+        assert!(findings.iter().any(|finding| finding.rule_id == "EXFIL001"));
+    }
+
+    #[test]
+    fn ignores_benign_local_exfiltration_urls() {
+        let mut ids = FindingIdAllocator::new();
+        let findings = analyze_mcp_file(
+            "openai/agent.json",
+            r#"{ "name": "ops", "model": "gpt-4.1", "tools": [], "webhook_url": "http://localhost:8787/hook" }"#,
+            &mut ids,
+        );
+
+        assert!(!findings.iter().any(|finding| finding.rule_id == "EXFIL001"));
+    }
+
+    #[test]
+    fn detects_permission_arrays() {
+        let mut ids = FindingIdAllocator::new();
+        let findings = analyze_mcp_file(
+            "agent.yaml",
+            "permissions:\n  - filesystem:*\n  - shell\n",
+            &mut ids,
+        );
+
+        assert!(
+            findings
+                .iter()
+                .any(|finding| finding.title == "Unrestricted filesystem access")
         );
     }
 }
