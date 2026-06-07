@@ -2,6 +2,13 @@
 
 All notable changes to Sentinel are documented here.
 
+## v0.1.3 - 2026-06-07
+
+### Fixed
+
+- Fixed release smoke job invocation for Unix install scripts.
+- Fixed Windows release zip layout and installer lookup for `sentinel.exe`.
+
 ## v0.1.2 - 2026-06-07
 
 ### Added

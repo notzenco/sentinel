@@ -54,7 +54,7 @@ jobs:
 
           if ("${{ matrix.archive }}" -eq "zip") {
             $asset = "dist/$package.zip"
-            Compress-Archive -Path "$root/*" -DestinationPath $asset -Force
+            Compress-Archive -Path $root -DestinationPath $asset -Force
           } else {
             $asset = "dist/$package.tar.gz"
             tar -C dist -czf $asset $package
@@ -105,7 +105,7 @@ jobs:
           SENTINEL_VERSION: ${{ github.ref_name }}
           SENTINEL_INSTALL_DIR: ${{ runner.temp }}/sentinel-bin
         run: |
-          scripts/install.sh
+          sh scripts/install.sh
           "$SENTINEL_INSTALL_DIR/sentinel" --version
           "$SENTINEL_INSTALL_DIR/sentinel" rules validate rules
 

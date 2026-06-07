@@ -79,7 +79,7 @@ JSON output uses this stable shape:
 ```json
 {
   "tool": "sentinel",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "summary": {
     "target": ".",
     "scanned_files": 12,
@@ -231,8 +231,8 @@ cargo test --workspace
 Maintainers cut releases by pushing a version tag:
 
 ```bash
-git tag -a v0.1.2 -m "v0.1.2"
-git push origin v0.1.2
+git tag -a v0.1.3 -m "v0.1.3"
+git push origin v0.1.3
 ```
 
 The release workflow builds Linux, macOS Intel, macOS Apple Silicon, and Windows x64 archives, publishes SHA-256 checksums, and smoke-tests the published install scripts against the release assets.

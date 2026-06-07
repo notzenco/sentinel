@@ -180,7 +180,7 @@ mod tests {
 
     #[test]
     fn renders_empty_report() {
-        let report = ScanReport::new(".", 0, Vec::new(), "0.1.2");
+        let report = ScanReport::new(".", 0, Vec::new(), "0.1.3");
         let html = render_html(&report).unwrap();
 
         assert!(html.contains("Sentinel Security Report"));

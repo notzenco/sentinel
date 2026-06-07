@@ -33,8 +33,16 @@ try {
     }
 
     Expand-Archive $zipPath -DestinationPath $tmp -Force
+    $binary = Join-Path $tmp "sentinel-$Version-$target\sentinel.exe"
+    if (-not (Test-Path $binary)) {
+        $binary = (Get-ChildItem $tmp -Recurse -Filter "sentinel.exe" | Select-Object -First 1).FullName
+    }
+    if (-not $binary) {
+        throw "sentinel.exe was not found in $asset"
+    }
+
     New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
-    Copy-Item (Join-Path $tmp "sentinel-$Version-$target\sentinel.exe") (Join-Path $InstallDir "sentinel.exe") -Force
+    Copy-Item $binary (Join-Path $InstallDir "sentinel.exe") -Force
     Write-Host "sentinel installed to $(Join-Path $InstallDir 'sentinel.exe')"
 } finally {
     Remove-Item $tmp -Recurse -Force
