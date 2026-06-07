@@ -2,6 +2,19 @@
 
 All notable changes to Sentinel are documented here.
 
+## v0.1.2 - 2026-06-07
+
+### Added
+
+- CLI finding filters: `--severity`, `--only-rule`, and `--exclude-rule` for scan, CI, Claude, and Cursor commands.
+- `sentinel rules validate <path>` for checking YAML rule packs before CI use.
+- Release smoke jobs that install published Linux, macOS, and Windows archives and run a basic command check.
+
+### Changed
+
+- Dangerous MCP tool detections are consolidated to one finding per file with all dangerous tools listed in the description.
+- GitHub workflow actions were updated to current major versions.
+
 ## v0.1.1 - 2026-06-07
 
 ### Added

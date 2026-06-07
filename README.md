@@ -35,9 +35,13 @@ sentinel scan .
 sentinel scan prompts/ --json
 sentinel scan mcp/ --sarif --output sentinel.sarif
 sentinel scan . --html --output report.html
+sentinel scan . --severity high
+sentinel scan . --only-rule MCP001
+sentinel scan . --exclude-rule PROMPT004
 sentinel ci . --fail-on high
 sentinel claude .
 sentinel cursor .
+sentinel rules validate rules
 ```
 
 Example terminal output:
@@ -45,9 +49,9 @@ Example terminal output:
 ```text
 Sentinel Security Scan
 Target: examples
-Files scanned: 2
+Files scanned: 9
 Security Score: 0/100
-Findings: 2 critical, 5 high, 1 medium, 0 low, 0 info
+Findings: 10 critical, 14 high, 1 medium, 0 low, 0 info
 
 Severity    Confidence Rule         Title                        Location
 ------------------------------------------------------------------------------------------------
@@ -75,7 +79,7 @@ JSON output uses this stable shape:
 ```json
 {
   "tool": "sentinel",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "summary": {
     "target": ".",
     "scanned_files": 12,
@@ -121,6 +125,12 @@ match:
 ```
 
 Supported match fields are `text`, `regex`, `file_extensions`, `path_contains`, `tool_name`, and `config_key`. Sentinel emits at most one finding per rule per file so multi-pattern rules do not flood reports.
+
+Validate a local rule pack before using it in CI:
+
+```bash
+sentinel rules validate rules
+```
 
 Built-in config findings use stable ids by family:
 
@@ -221,8 +231,8 @@ cargo test --workspace
 Maintainers cut releases by pushing a version tag:
 
 ```bash
-git tag -a v0.1.1 -m "v0.1.1"
-git push origin v0.1.1
+git tag -a v0.1.2 -m "v0.1.2"
+git push origin v0.1.2
 ```
 
-The release workflow builds Linux, macOS Intel, macOS Apple Silicon, and Windows x64 archives and publishes SHA-256 checksums.
+The release workflow builds Linux, macOS Intel, macOS Apple Silicon, and Windows x64 archives, publishes SHA-256 checksums, and smoke-tests the published install scripts against the release assets.
