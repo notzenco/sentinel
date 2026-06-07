@@ -1065,7 +1065,7 @@ checksum = "8a7852d02fc848982e0c167ef163aaff9cd91dc640ba85e263cb1ce46fae51cd"
 
 [[package]]
 name = "sentinel"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -1076,6 +1076,7 @@ dependencies = [
  "sentinel-common",
  "sentinel-findings",
  "sentinel-html-report",
+ "sentinel-rules",
  "sentinel-sarif",
  "sentinel-scanner",
  "serde_json",
@@ -1085,7 +1086,7 @@ dependencies = [
 
 [[package]]
 name = "sentinel-ai-config"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -1095,7 +1096,7 @@ dependencies = [
 
 [[package]]
 name = "sentinel-common"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "globset",
@@ -1106,7 +1107,7 @@ dependencies = [
 
 [[package]]
 name = "sentinel-findings"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "chrono",
  "serde",
@@ -1115,7 +1116,7 @@ dependencies = [
 
 [[package]]
 name = "sentinel-git-integration"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "serde",
  "tempfile",
@@ -1123,7 +1124,7 @@ dependencies = [
 
 [[package]]
 name = "sentinel-github-actions"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "regex",
  "sentinel-common",
@@ -1133,7 +1134,7 @@ dependencies = [
 
 [[package]]
 name = "sentinel-html-report"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "sentinel-findings",
@@ -1142,7 +1143,7 @@ dependencies = [
 
 [[package]]
 name = "sentinel-jailbreak-analysis"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "regex",
  "sentinel-common",
@@ -1153,7 +1154,7 @@ dependencies = [
 
 [[package]]
 name = "sentinel-mcp-analysis"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "regex",
  "sentinel-ai-config",
@@ -1168,7 +1169,7 @@ dependencies = [
 
 [[package]]
 name = "sentinel-prompt-analysis"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "regex",
  "sentinel-common",
@@ -1178,7 +1179,7 @@ dependencies = [
 
 [[package]]
 name = "sentinel-rules"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "regex",
@@ -1192,7 +1193,7 @@ dependencies = [
 
 [[package]]
 name = "sentinel-sarif"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "sentinel-findings",
@@ -1201,7 +1202,7 @@ dependencies = [
 
 [[package]]
 name = "sentinel-scanner"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "sentinel-common",
@@ -1218,7 +1219,7 @@ dependencies = [
 
 [[package]]
 name = "sentinel-secret-analysis"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "once_cell",
  "regex",

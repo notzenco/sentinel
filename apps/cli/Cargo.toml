@@ -19,6 +19,7 @@ indicatif.workspace = true
 sentinel-common = { path = "../../crates/common" }
 sentinel-findings = { path = "../../crates/findings" }
 sentinel-html-report = { path = "../../crates/html-report" }
+sentinel-rules = { path = "../../crates/rules" }
 sentinel-sarif = { path = "../../crates/sarif" }
 sentinel-scanner = { path = "../../crates/scanner" }
 serde_yaml.workspace = true
@@ -28,4 +29,3 @@ serde_json.workspace = true
 assert_cmd.workspace = true
 predicates.workspace = true
 tempfile.workspace = true
-

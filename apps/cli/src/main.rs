@@ -3,10 +3,12 @@ use clap::{Args, Parser, Subcommand};
 use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
 use sentinel_common::ScanProfile;
-use sentinel_findings::{ScanReport, Severity};
+use sentinel_findings::{Finding, ScanReport, Severity};
 use sentinel_html_report::render_html;
+use sentinel_rules::RuleSet;
 use sentinel_sarif::to_sarif_string;
 use sentinel_scanner::{ScanOptions, Scanner, SentinelConfig};
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -30,6 +32,8 @@ enum Commands {
     Claude(ProfileArgs),
     /// Scan Cursor project rules, agents, and prompts.
     Cursor(ProfileArgs),
+    /// Manage Sentinel YAML rules.
+    Rules(RulesArgs),
 }
 
 #[derive(Debug, Args, Clone)]
@@ -48,6 +52,8 @@ struct ScanArgs {
     config: Option<PathBuf>,
     #[arg(long, value_parser = parse_severity)]
     fail_on: Option<Severity>,
+    #[command(flatten)]
+    filters: FilterArgs,
 }
 
 #[derive(Debug, Args, Clone)]
@@ -60,6 +66,8 @@ struct CiArgs {
     fail_on: Severity,
     #[arg(long)]
     sarif_output: Option<PathBuf>,
+    #[command(flatten)]
+    filters: FilterArgs,
 }
 
 #[derive(Debug, Args, Clone)]
@@ -78,6 +86,36 @@ struct ProfileArgs {
     config: Option<PathBuf>,
     #[arg(long, value_parser = parse_severity)]
     fail_on: Option<Severity>,
+    #[command(flatten)]
+    filters: FilterArgs,
+}
+
+#[derive(Debug, Args, Clone, Default)]
+struct FilterArgs {
+    #[arg(long, value_parser = parse_severity)]
+    severity: Option<Severity>,
+    #[arg(long = "only-rule", value_name = "RULE_ID")]
+    only_rules: Vec<String>,
+    #[arg(long = "exclude-rule", value_name = "RULE_ID")]
+    exclude_rules: Vec<String>,
+}
+
+#[derive(Debug, Args)]
+struct RulesArgs {
+    #[command(subcommand)]
+    command: RulesCommands,
+}
+
+#[derive(Debug, Subcommand)]
+enum RulesCommands {
+    /// Validate a directory of YAML rules.
+    Validate(RulesValidateArgs),
+}
+
+#[derive(Debug, Args)]
+struct RulesValidateArgs {
+    #[arg(default_value = "rules")]
+    path: PathBuf,
 }
 
 fn main() {
@@ -98,11 +136,17 @@ fn run() -> Result<i32> {
         Commands::Ci(args) => run_ci(args),
         Commands::Claude(args) => run_profile(args, ScanProfile::Claude),
         Commands::Cursor(args) => run_profile(args, ScanProfile::Cursor),
+        Commands::Rules(args) => run_rules(args),
     }
 }
 
 fn run_scan(args: ScanArgs) -> Result<i32> {
-    let report = execute_scan(&args.path, ScanProfile::General, args.config.as_ref())?;
+    let report = execute_scan(
+        &args.path,
+        ScanProfile::General,
+        args.config.as_ref(),
+        &args.filters,
+    )?;
     emit_report(
         &report,
         args.json,
@@ -114,7 +158,7 @@ fn run_scan(args: ScanArgs) -> Result<i32> {
 }
 
 fn run_profile(args: ProfileArgs, profile: ScanProfile) -> Result<i32> {
-    let report = execute_scan(&args.path, profile, args.config.as_ref())?;
+    let report = execute_scan(&args.path, profile, args.config.as_ref(), &args.filters)?;
     emit_report(
         &report,
         args.json,
@@ -126,7 +170,12 @@ fn run_profile(args: ProfileArgs, profile: ScanProfile) -> Result<i32> {
 }
 
 fn run_ci(args: CiArgs) -> Result<i32> {
-    let report = execute_scan(&args.path, ScanProfile::General, args.config.as_ref())?;
+    let report = execute_scan(
+        &args.path,
+        ScanProfile::General,
+        args.config.as_ref(),
+        &args.filters,
+    )?;
     print_terminal_report(&report);
 
     if let Some(path) = args.sarif_output.as_ref() {
@@ -140,10 +189,39 @@ fn run_ci(args: CiArgs) -> Result<i32> {
     })
 }
 
+fn run_rules(args: RulesArgs) -> Result<i32> {
+    match args.command {
+        RulesCommands::Validate(args) => run_rules_validate(args),
+    }
+}
+
+fn run_rules_validate(args: RulesValidateArgs) -> Result<i32> {
+    anyhow::ensure!(
+        args.path.exists(),
+        "rules directory does not exist: {}",
+        args.path.display()
+    );
+    anyhow::ensure!(
+        args.path.is_dir(),
+        "rules path is not a directory: {}",
+        args.path.display()
+    );
+
+    let rules = RuleSet::load_dir(&args.path)
+        .with_context(|| format!("failed to validate rules in {}", args.path.display()))?;
+    println!(
+        "Validated {} rules in {}",
+        rules.rules().len(),
+        args.path.display()
+    );
+    Ok(0)
+}
+
 fn execute_scan(
     target: &PathBuf,
     profile: ScanProfile,
     config_path: Option<&PathBuf>,
+    filters: &FilterArgs,
 ) -> Result<ScanReport> {
     let spinner = ProgressBar::new_spinner();
     spinner.set_style(
@@ -165,7 +243,7 @@ fn execute_scan(
 
     let report = Scanner::new(options).scan();
     spinner.finish_and_clear();
-    report
+    report.map(|report| apply_filters(report, filters))
 }
 
 fn load_config(target: &Path, path: Option<&PathBuf>) -> Result<(SentinelConfig, Option<PathBuf>)> {
@@ -256,6 +334,55 @@ fn emit_report(
 
     print_terminal_report(report);
     Ok(())
+}
+
+fn apply_filters(report: ScanReport, filters: &FilterArgs) -> ScanReport {
+    if filters.severity.is_none()
+        && filters.only_rules.is_empty()
+        && filters.exclude_rules.is_empty()
+    {
+        return report;
+    }
+
+    let only_rules = normalized_rule_set(&filters.only_rules);
+    let exclude_rules = normalized_rule_set(&filters.exclude_rules);
+    let version = report.version;
+    let target = report.summary.target;
+    let scanned_files = report.summary.scanned_files;
+    let findings = report
+        .findings
+        .into_iter()
+        .filter(|finding| finding_matches_filters(finding, filters, &only_rules, &exclude_rules))
+        .collect::<Vec<_>>();
+
+    ScanReport::new(target, scanned_files, findings, version)
+}
+
+fn finding_matches_filters(
+    finding: &Finding,
+    filters: &FilterArgs,
+    only_rules: &HashSet<String>,
+    exclude_rules: &HashSet<String>,
+) -> bool {
+    if let Some(severity) = filters.severity {
+        if !finding.severity.is_at_least(severity) {
+            return false;
+        }
+    }
+
+    let rule_id = finding.rule_id.to_ascii_lowercase();
+    if !only_rules.is_empty() && !only_rules.contains(&rule_id) {
+        return false;
+    }
+
+    !exclude_rules.contains(&rule_id)
+}
+
+fn normalized_rule_set(values: &[String]) -> HashSet<String> {
+    values
+        .iter()
+        .map(|value| value.to_ascii_lowercase())
+        .collect()
 }
 
 fn emit_text(body: &str, output: Option<&PathBuf>) -> Result<()> {

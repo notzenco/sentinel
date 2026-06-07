@@ -116,7 +116,7 @@ mod tests {
                 location: Location::new("prompt.md", Some(1), Some(1)),
                 recommendation: "Remove it.".to_string(),
             }],
-            "0.1.1",
+            "0.1.2",
         );
 
         let sarif = to_sarif(&report);
