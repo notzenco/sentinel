@@ -363,7 +363,7 @@ mod tests {
                 finding(Severity::Critical, Confidence::High),
                 finding(Severity::Medium, Confidence::Medium),
             ],
-            "0.1.0",
+            "0.1.1",
         );
 
         assert_eq!(report.summary.findings_count, 2);

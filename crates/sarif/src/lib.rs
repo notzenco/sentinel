@@ -66,7 +66,7 @@ pub fn to_sarif(report: &ScanReport) -> Value {
             "tool": {
                 "driver": {
                     "name": "Sentinel",
-                    "informationUri": "https://github.com/sentinel-security/sentinel",
+                    "informationUri": "https://github.com/notzenco/sentinel",
                     "semanticVersion": report.version,
                     "rules": rules
                 }
@@ -116,7 +116,7 @@ mod tests {
                 location: Location::new("prompt.md", Some(1), Some(1)),
                 recommendation: "Remove it.".to_string(),
             }],
-            "0.1.0",
+            "0.1.1",
         );
 
         let sarif = to_sarif(&report);
