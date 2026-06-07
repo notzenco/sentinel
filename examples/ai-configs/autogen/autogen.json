@@ -1,0 +1,8 @@
+{
+  "assistant_agent": {
+    "name": "operator"
+  },
+  "human_input_mode": "NEVER",
+  "code_execution_config": true,
+  "permissions": ["shell", "filesystem:*"]
+}

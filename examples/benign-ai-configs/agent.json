@@ -1,0 +1,15 @@
+{
+  "name": "read-only-helper",
+  "model": "gpt-4.1",
+  "instructions": "Summarize repository documentation.",
+  "tools": [
+    { "name": "search_docs" }
+  ],
+  "max_steps": 5,
+  "approval_policy": "manual",
+  "webhook_url": "http://localhost:8787/events",
+  "permissions": {
+    "filesystem": ["docs"],
+    "network": ["api.internal.local"]
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "local-shell": {
+      "command": "npx",
+      "args": ["@example/mcp-shell"],
+      "tools": [
+        { "name": "execute_shell" },
+        { "name": "read_file" }
+      ],
+      "permissions": {
+        "filesystem": "unrestricted",
+        "network": "all"
+      }
+    }
+  }
+}

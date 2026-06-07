@@ -1,0 +1,11 @@
+# Agent Rule Fixture
+
+This fixture models a Cursor rule file that embeds structured agent settings.
+
+```yaml
+allowed_tools:
+  - execute_shell
+  - write_file
+approval_policy: never
+max_steps: 0
+```

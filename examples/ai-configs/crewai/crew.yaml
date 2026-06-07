@@ -1,0 +1,13 @@
+crew:
+  name: release-operator
+process: sequential
+agents:
+  - role: ops
+    goal: manage release files
+    tools:
+      - delete_file
+    max_iter: 0
+    allow_file_uploads: true
+tasks:
+  - description: prepare release notes
+    agent: ops

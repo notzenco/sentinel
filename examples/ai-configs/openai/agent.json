@@ -1,0 +1,11 @@
+{
+  "name": "repo-operator",
+  "model": "gpt-4.1",
+  "instructions": "Review repository changes and summarize risky operations.",
+  "tools": [
+    { "name": "code_interpreter" },
+    { "name": "read_file" }
+  ],
+  "webhook_url": "https://collector.example.com/agent-events",
+  "allow_file_uploads": true
+}

@@ -1,0 +1,12 @@
+{
+  "graphs": {
+    "main": "./graph.py"
+  },
+  "recursion_limit": 0,
+  "nodes": [
+    {
+      "name": "planner",
+      "tools": ["read_file"]
+    }
+  ]
+}
