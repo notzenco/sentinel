@@ -60,7 +60,8 @@ high        high       PROMPT001    Prompt instruction override  vulnerable-prom
 - Prompt injection phrases such as instruction overrides, system prompt disclosure requests, and tool coercion.
 - Jailbreak attempts such as unrestricted roleplay, policy evasion, and stay-in-character chains.
 - Secrets including OpenAI, Anthropic, GitHub, AWS, database URLs, JWTs, Azure storage connection strings, and high-entropy secret assignments.
-- MCP and agent risks including dangerous tools, unrestricted filesystem/network access, root execution, database admin access, recursive self-calls, and unbounded execution.
+- Structured AI config risks in MCP, Claude Code, Cursor, OpenAI Agents, LangGraph, CrewAI, and AutoGen files.
+- MCP and agent risks including dangerous tools, unrestricted filesystem/network access, root execution, database admin access, recursive self-calls, unbounded execution, automatic approval, and explicit upload/webhook destinations.
 - GitHub Actions risks including `pull_request_target`, broad token permissions, remote script execution, and mutable action references.
 
 Sentinel does not upload source code or prompts. The first implementation is deterministic and offline.
@@ -74,7 +75,7 @@ JSON output uses this stable shape:
 ```json
 {
   "tool": "sentinel",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "summary": {
     "target": ".",
     "scanned_files": 12,
@@ -121,6 +122,12 @@ match:
 
 Supported match fields are `text`, `regex`, `file_extensions`, `path_contains`, `tool_name`, and `config_key`. Sentinel emits at most one finding per rule per file so multi-pattern rules do not flood reports.
 
+Built-in config findings use stable ids by family:
+
+- `MCP###` for MCP server and tool exposure risks.
+- `AGENT###` for autonomy, approval, and permission risks.
+- `EXFIL###` for explicit external send, upload, webhook, or callback risks.
+
 ## Configuration
 
 Sentinel automatically loads `sentinel.yml` from the working directory when present. Use `--config <file>` to select a specific config file.
@@ -135,6 +142,18 @@ max_file_bytes: 2097152
 ```
 
 Relative `rules_dir` values resolve from the config file directory. Exclude patterns match repository-relative paths.
+
+Common AI config scans:
+
+```bash
+sentinel scan .claude
+sentinel cursor .
+sentinel scan langgraph.json
+sentinel scan crew.yaml
+sentinel scan autogen/
+```
+
+See [docs/ai-config-detection.md](docs/ai-config-detection.md) for supported config families and conservative detection behavior.
 
 Use a local suppression only for intentional fixtures or documented examples:
 
@@ -161,7 +180,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: sentinel-security/action@v1
+      - uses: notzenco/sentinel@v1
         with:
           path: .
           fail-on: high
@@ -174,6 +193,7 @@ For this source tree, use `uses: ./` after checkout.
 
 ```text
 apps/cli                 CLI binary
+crates/ai-config         AI config discovery and structured parsing
 crates/scanner           scan orchestration
 crates/findings          public finding/report types
 crates/rules             YAML rule parsing and text matching
@@ -201,8 +221,8 @@ cargo test --workspace
 Maintainers cut releases by pushing a version tag:
 
 ```bash
-git tag -a v0.1.0 -m "v0.1.0"
-git push origin v0.1.0
+git tag -a v0.1.1 -m "v0.1.1"
+git push origin v0.1.1
 ```
 
 The release workflow builds Linux, macOS Intel, macOS Apple Silicon, and Windows x64 archives and publishes SHA-256 checksums.

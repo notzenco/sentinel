@@ -4,6 +4,7 @@
 
 - Rust workspace and CLI.
 - Deterministic prompt, jailbreak, secret, MCP, agent, and workflow analysis.
+- Low-noise structured AI config parsing for Claude Code, Cursor, OpenAI Agents, LangGraph, CrewAI, and AutoGen.
 - YAML rule engine.
 - Terminal, JSON, SARIF, and HTML output.
 - GitHub Action and CI.
