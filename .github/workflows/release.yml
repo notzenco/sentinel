@@ -87,3 +87,39 @@ jobs:
             dist/*.tar.gz
             dist/*.zip
             dist/*.sha256
+
+  smoke-install-unix:
+    needs: publish
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-14
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install published release archive
+        shell: bash
+        env:
+          SENTINEL_VERSION: ${{ github.ref_name }}
+          SENTINEL_INSTALL_DIR: ${{ runner.temp }}/sentinel-bin
+        run: |
+          scripts/install.sh
+          "$SENTINEL_INSTALL_DIR/sentinel" --version
+          "$SENTINEL_INSTALL_DIR/sentinel" rules validate rules
+
+  smoke-install-windows:
+    needs: publish
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install published release archive
+        shell: pwsh
+        env:
+          SENTINEL_VERSION: ${{ github.ref_name }}
+          SENTINEL_INSTALL_DIR: ${{ runner.temp }}\sentinel-bin
+        run: |
+          ./scripts/install.ps1
+          & "$env:SENTINEL_INSTALL_DIR\sentinel.exe" --version
+          & "$env:SENTINEL_INSTALL_DIR\sentinel.exe" rules validate rules
