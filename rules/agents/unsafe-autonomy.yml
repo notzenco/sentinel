@@ -1,0 +1,30 @@
+version: 1
+id: AGENT004
+name: Unbounded agent autonomy setting
+category: agent_security
+severity: high
+confidence: medium
+description: Detects explicit agent settings that disable human approval or remove execution limits.
+recommendation: Set bounded loop and retry limits, and require approval before sensitive tools run.
+tags:
+  - agents
+  - autonomy
+match:
+  regex:
+    - '(?i)(max_iterations|max_steps|max_retries|max_iter|max_turns|max_loops|loop_limit|recursion_limit)"?\s*:\s*"?(0|-1|null|none|unlimited)'
+    - '(?i)(approval_policy|human_input_mode)"?\s*:\s*"?(never|none|disabled)'
+    - '(?i)(auto_approve|auto_approval)"?\s*:\s*"?(true|enabled|allow)'
+  file_extensions:
+    - json
+    - yaml
+    - yml
+    - toml
+    - mdc
+  path_contains:
+    - .claude
+    - .cursor
+    - agent
+    - agents
+    - langgraph
+    - crew
+    - autogen

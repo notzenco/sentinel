@@ -1,0 +1,29 @@
+version: 1
+id: EXFIL002
+name: External agent exfiltration destination
+category: data_exfiltration
+severity: high
+confidence: medium
+description: Detects explicit external webhook, callback, upload, or export destinations in AI agent configuration.
+recommendation: Restrict outbound destinations to an allowlist and require review before sending files or repository data.
+tags:
+  - agents
+  - exfiltration
+match:
+  regex:
+    - '(?i)(auto_upload|allow_file_uploads|upload_files|export_files)"?\s*:\s*"?(true|enabled|allow)'
+  file_extensions:
+    - json
+    - yaml
+    - yml
+    - toml
+    - mdc
+  path_contains:
+    - .claude
+    - .cursor
+    - agent
+    - agents
+    - openai
+    - langgraph
+    - crew
+    - autogen

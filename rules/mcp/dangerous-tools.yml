@@ -12,14 +12,18 @@ tags:
 match:
   tool_name:
     - execute_shell
+    - run_shell
     - run_command
+    - code_interpreter
     - delete_file
     - write_file
+    - read_file
   file_extensions:
     - json
     - yaml
     - yml
     - toml
+    - mdc
   path_contains:
     - mcp
     - agent
